@@ -48,7 +48,8 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddMeter("EventGateway.Api")
-        .AddConsoleExporter());
+        .AddConsoleExporter()
+        .AddPrometheusExporter());
 
 var app = builder.Build();
 
@@ -61,6 +62,7 @@ app.Use(async (context, next) =>
     }
 });
 
+app.UseMiddleware<EventGateway.Api.Observability.RequestMetricsMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler(errorApp =>
 {
@@ -92,6 +94,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint("/metrics");
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "event-gateway")

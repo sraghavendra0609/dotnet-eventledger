@@ -52,8 +52,34 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 - Serilog structured JSON logs
 - OpenTelemetry tracing + metrics
 - W3C trace context propagation (`traceparent`)
+- Custom metrics: request count by endpoint, latency histogram, and error rate — exposed via Prometheus at `/metrics`
 - Polly resiliency on Gateway outbound calls (timeout + retry with exponential backoff)
 - Graceful degradation (Gateway `POST /events` returns `503` when Account service is unavailable; reads continue from local DB)
+
+## Custom metrics
+
+Both services instrument every HTTP request with three custom metrics exposed via a Prometheus-compatible `/metrics` endpoint.
+
+| Metric | Type | Tags | Description |
+|---|---|---|---|
+| `event_gateway_requests_total` / `account_service_requests_total` | Counter | `endpoint` | Request count per endpoint |
+| `http_request_duration_ms` | Histogram | `endpoint`, `status_code` | End-to-end request latency in milliseconds |
+| `http_request_errors_total` | Counter | `endpoint`, `status_code` | Count of requests that returned a 4xx or 5xx response |
+
+The request counter is recorded per controller action (tagged with the route template, e.g. `POST /events`).  
+The latency histogram and error counter are collected by `RequestMetricsMiddleware` and wrap every request, including health checks and unmatched routes.
+
+All three instruments belong to a named `Meter` (`EventGateway.Api` / `AccountService.Api`) subscribed to by the OpenTelemetry SDK, which exports them both to the console and to the Prometheus scraping endpoint at `/metrics`.
+
+### Scraping metrics locally
+
+```bash
+# Event Gateway metrics
+curl http://localhost:8080/metrics
+
+# Account Service metrics
+curl http://localhost:8081/metrics
+```
 
 ## Endpoints
 
@@ -65,6 +91,7 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 | `GET` | `/events/{id}` | Retrieve event by ID |
 | `GET` | `/events?account={accountId}` | List events for an account (sorted by timestamp) |
 | `GET` | `/health` | Health check |
+| `GET` | `/metrics` | Prometheus metrics scraping endpoint |
 
 ### Account Service
 
@@ -74,6 +101,7 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 | `GET` | `/accounts/{accountId}/balance` | Get current balance |
 | `GET` | `/accounts/{accountId}` | Get account details with transaction history |
 | `GET` | `/health` | Health check |
+| `GET` | `/metrics` | Prometheus metrics scraping endpoint |
 
 ## Prerequisites
 

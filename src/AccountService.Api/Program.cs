@@ -45,7 +45,8 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddMeter("AccountService.Api")
-        .AddConsoleExporter());
+        .AddConsoleExporter()
+        .AddPrometheusExporter());
 
 var app = builder.Build();
 
@@ -58,6 +59,7 @@ app.Use(async (context, next) =>
     }
 });
 
+app.UseMiddleware<AccountService.Api.Observability.RequestMetricsMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler(errorApp =>
 {
@@ -80,6 +82,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint("/metrics");
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "account-service")
