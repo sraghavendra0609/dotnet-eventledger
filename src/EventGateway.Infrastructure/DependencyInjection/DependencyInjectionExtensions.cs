@@ -23,7 +23,7 @@ public static class DependencyInjectionExtensions
         services.AddHttpClient("AccountServiceClient", client =>
             {
                 client.BaseAddress = new Uri(accountServiceBaseUrl);
-                client.Timeout = TimeSpan.FromSeconds(2);
+                client.Timeout = Timeout.InfiniteTimeSpan;
             })
             .AddPolicyHandler(HttpPolicyExtensions
                 .HandleTransientHttpError()

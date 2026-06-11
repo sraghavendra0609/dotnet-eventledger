@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AccountService.Application.Behaviors;
+using AccountService.Application.Services;
 using AccountService.Infrastructure.DependencyInjection;
 using AccountService.Infrastructure.Persistence;
 using FluentValidation;
@@ -29,6 +30,7 @@ builder.Services.AddControllers();
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(AccountService.Application.Commands.ApplyTransactionCommand).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(AccountService.Application.Commands.ApplyTransactionCommand).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddSingleton<TransactionIdempotencyLock>();
 builder.Services.AddAccountInfrastructure();
 builder.Services.AddHealthChecks();
 

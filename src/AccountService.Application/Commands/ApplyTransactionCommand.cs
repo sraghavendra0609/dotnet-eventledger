@@ -1,4 +1,5 @@
 using AccountService.Application.Abstractions;
+using AccountService.Application.Services;
 using AccountService.Domain.Entities;
 using AccountService.Domain.Enums;
 using FluentValidation;
@@ -19,26 +20,35 @@ public sealed class ApplyTransactionCommandValidator : AbstractValidator<ApplyTr
     }
 }
 
-public sealed class ApplyTransactionCommandHandler(IAccountRepository accountRepository) : IRequestHandler<ApplyTransactionCommand, bool>
+public sealed class ApplyTransactionCommandHandler(IAccountRepository accountRepository, TransactionIdempotencyLock idempotencyLock) : IRequestHandler<ApplyTransactionCommand, bool>
 {
     public async Task<bool> Handle(ApplyTransactionCommand request, CancellationToken cancellationToken)
     {
-        var existing = await accountRepository.GetByEventIdAsync(request.EventId, cancellationToken);
-        if (existing is not null)
+        var semaphore = idempotencyLock.GetLockFor(request.EventId);
+        await semaphore.WaitAsync(cancellationToken);
+        try
         {
-            return true;
+            var existing = await accountRepository.GetByEventIdAsync(request.EventId, cancellationToken);
+            if (existing is not null)
+            {
+                return true;
+            }
+
+            var transaction = new AccountTransaction
+            {
+                AccountId = request.AccountId,
+                EventId = request.EventId,
+                EventType = Enum.Parse<EventType>(request.EventType, true),
+                Amount = request.Amount,
+                EventTimestamp = request.EventTimestamp
+            };
+
+            await accountRepository.AddAsync(transaction, cancellationToken);
+            return false;
         }
-
-        var transaction = new AccountTransaction
+        finally
         {
-            AccountId = request.AccountId,
-            EventId = request.EventId,
-            EventType = Enum.Parse<EventType>(request.EventType, true),
-            Amount = request.Amount,
-            EventTimestamp = request.EventTimestamp
-        };
-
-        await accountRepository.AddAsync(transaction, cancellationToken);
-        return false;
+            semaphore.Release();
+        }
     }
 }

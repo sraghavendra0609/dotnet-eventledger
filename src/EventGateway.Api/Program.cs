@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using EventGateway.Application.Behaviors;
 using EventGateway.Application.Exceptions;
+using EventGateway.Application.Services;
 using EventGateway.Infrastructure.DependencyInjection;
 using EventGateway.Infrastructure.Persistence;
 using FluentValidation;
@@ -30,6 +31,7 @@ builder.Services.AddControllers();
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(EventGateway.Application.Commands.CreateEventCommand).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(EventGateway.Application.Commands.CreateEventCommand).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddSingleton<EventIdempotencyLock>();
 builder.Services.AddGatewayInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 

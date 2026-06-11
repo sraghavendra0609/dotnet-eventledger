@@ -1,6 +1,19 @@
 @EventGateway.Api_HostAddress = http://localhost:5083
 
-GET {{EventGateway.Api_HostAddress}}/weatherforecast/
+GET {{EventGateway.Api_HostAddress}}/health
 Accept: application/json
+
+###
+
+POST {{EventGateway.Api_HostAddress}}/events
+Content-Type: application/json
+
+{
+  "eventId": "00000000-0000-0000-0000-000000000001",
+  "accountId": "acc-001",
+  "eventType": "CREDIT",
+  "amount": 100.00,
+  "eventTimestamp": "2024-01-01T00:00:00Z"
+}
 
 ###
