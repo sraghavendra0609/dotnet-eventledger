@@ -16,7 +16,7 @@ public sealed class AccountsController(IMediator mediator) : ControllerBase
     [HttpPost("{accountId}/transactions")]
     public async Task<IActionResult> ApplyTransaction(string accountId, [FromBody] ApplyTransactionRequest request, CancellationToken cancellationToken)
     {
-        RequestsCounter.Add(1);
+        RequestsCounter.Add(1, new TagList { { "endpoint", "POST /accounts/{accountId}/transactions" } });
         var isDuplicate = await mediator.Send(new ApplyTransactionCommand(accountId, request.EventId, request.EventType, request.Amount, request.EventTimestamp), cancellationToken);
         return isDuplicate ? Ok(new { duplicated = true }) : Accepted(new { duplicated = false });
     }
@@ -24,7 +24,7 @@ public sealed class AccountsController(IMediator mediator) : ControllerBase
     [HttpGet("{accountId}/balance")]
     public async Task<IActionResult> GetBalance(string accountId, CancellationToken cancellationToken)
     {
-        RequestsCounter.Add(1);
+        RequestsCounter.Add(1, new TagList { { "endpoint", "GET /accounts/{accountId}/balance" } });
         var balance = await mediator.Send(new GetBalanceQuery(accountId), cancellationToken);
         return Ok(new { accountId, balance });
     }
@@ -32,7 +32,7 @@ public sealed class AccountsController(IMediator mediator) : ControllerBase
     [HttpGet("{accountId}")]
     public async Task<IActionResult> GetAccount(string accountId, CancellationToken cancellationToken)
     {
-        RequestsCounter.Add(1);
+        RequestsCounter.Add(1, new TagList { { "endpoint", "GET /accounts/{accountId}" } });
         var account = await mediator.Send(new GetAccountQuery(accountId), cancellationToken);
         return Ok(account);
     }

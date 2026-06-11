@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using EventGateway.Api.Observability;
 using EventGateway.Application.Behaviors;
 using EventGateway.Application.Exceptions;
 using EventGateway.Application.Services;
@@ -34,7 +35,8 @@ builder.Services.AddValidatorsFromAssembly(typeof(EventGateway.Application.Comma
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddSingleton<EventIdempotencyLock>();
 builder.Services.AddGatewayInfrastructure(builder.Configuration);
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<EventGatewayDatabaseHealthCheck>("database");
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("event-gateway"))
@@ -90,7 +92,10 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "event-gateway")
+});
 
 app.Run();
 

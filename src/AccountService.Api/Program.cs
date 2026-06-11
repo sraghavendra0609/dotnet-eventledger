@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AccountService.Api.Observability;
 using AccountService.Application.Behaviors;
 using AccountService.Application.Services;
 using AccountService.Infrastructure.DependencyInjection;
@@ -33,7 +34,8 @@ builder.Services.AddValidatorsFromAssembly(typeof(AccountService.Application.Com
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddSingleton<TransactionIdempotencyLock>();
 builder.Services.AddAccountInfrastructure();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<AccountServiceDatabaseHealthCheck>("database");
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("account-service"))
@@ -78,7 +80,10 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "account-service")
+});
 
 app.Run();
 

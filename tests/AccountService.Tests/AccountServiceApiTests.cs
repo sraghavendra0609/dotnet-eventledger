@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -80,6 +81,24 @@ public sealed class AccountServiceApiTests : IClassFixture<WebApplicationFactory
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Health_ReturnsJsonStatusWithDatabaseDiagnostics()
+    {
+        var response = await _client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        payload["service"]!.GetValue<string>().Should().Be("account-service");
+        payload["status"]!.GetValue<string>().Should().Be("Healthy");
+
+        var databaseCheck = payload["checks"]!["database"]!;
+        databaseCheck["status"]!.GetValue<string>().Should().Be("Healthy");
+        databaseCheck["data"]!["provider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
+        databaseCheck["data"]!["connectivity"]!.GetValue<string>().Should().Be("reachable");
     }
 
     private sealed record BalanceResponse(string AccountId, decimal Balance);

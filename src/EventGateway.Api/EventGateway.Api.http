@@ -17,3 +17,13 @@ Content-Type: application/json
 }
 
 ###
+
+GET {{EventGateway.Api_HostAddress}}/events/00000000-0000-0000-0000-000000000001
+Accept: application/json
+
+###
+
+GET {{EventGateway.Api_HostAddress}}/events?account=acc-001
+Accept: application/json
+
+###

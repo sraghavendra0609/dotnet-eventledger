@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using EventGateway.Application.Abstractions;
 using EventGateway.Application.Exceptions;
 using EventGateway.Infrastructure.Clients;
@@ -212,6 +213,27 @@ public sealed class EventGatewayApiTests
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Health_ReturnsJsonStatusWithDatabaseDiagnostics()
+    {
+        await using var factory = CreateGatewayFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        payload["service"]!.GetValue<string>().Should().Be("event-gateway");
+        payload["status"]!.GetValue<string>().Should().Be("Healthy");
+
+        var databaseCheck = payload["checks"]!["database"]!;
+        databaseCheck["status"]!.GetValue<string>().Should().Be("Healthy");
+        databaseCheck["data"]!["provider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
+        databaseCheck["data"]!["connectivity"]!.GetValue<string>().Should().Be("reachable");
     }
 
     private static WebApplicationFactory<EventGateway.Api.ApiMarker> CreateGatewayFactory(Action<IServiceCollection>? configureServices = null)

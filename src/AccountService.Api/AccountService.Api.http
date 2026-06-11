@@ -4,3 +4,25 @@ GET {{AccountService.Api_HostAddress}}/health
 Accept: application/json
 
 ###
+
+POST {{AccountService.Api_HostAddress}}/accounts/acc-001/transactions
+Content-Type: application/json
+
+{
+  "eventId": "00000000-0000-0000-0000-000000000001",
+  "eventType": "CREDIT",
+  "amount": 100.00,
+  "eventTimestamp": "2024-01-01T00:00:00Z"
+}
+
+###
+
+GET {{AccountService.Api_HostAddress}}/accounts/acc-001/balance
+Accept: application/json
+
+###
+
+GET {{AccountService.Api_HostAddress}}/accounts/acc-001
+Accept: application/json
+
+###
