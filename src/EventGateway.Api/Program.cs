@@ -10,6 +10,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Context;
 using Serilog.Formatting.Compact;
 
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -48,6 +49,15 @@ builder.Services.AddOpenTelemetry()
         .AddConsoleExporter());
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    using (LogContext.PushProperty("traceId", traceId))
+    {
+        await next();
+    }
+});
 
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler(errorApp =>

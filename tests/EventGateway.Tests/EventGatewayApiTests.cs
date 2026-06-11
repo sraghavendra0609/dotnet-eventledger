@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using EventGateway.Application.Abstractions;
@@ -129,10 +128,10 @@ public sealed class EventGatewayApiTests
     [Fact]
     public async Task TraceParentHeader_IsPropagatedToAccountService()
     {
-        string? traceParent = null;
+        string? outboundTraceParent = null;
         var handler = new DelegatingHandlerStub(request =>
         {
-            traceParent = request.Headers.TryGetValues("traceparent", out var values) ? values.SingleOrDefault() : null;
+            outboundTraceParent = request.Headers.TryGetValues("traceparent", out var values) ? values.SingleOrDefault() : null;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
         });
 
@@ -145,18 +144,25 @@ public sealed class EventGatewayApiTests
         });
 
         var client = factory.CreateClient();
+        const string inboundTraceParent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
-        using var activity = new Activity("test").Start();
-        await client.PostAsJsonAsync("/events", new
+        var request = new HttpRequestMessage(HttpMethod.Post, "/events")
         {
-            eventId = Guid.NewGuid(),
-            accountId = "acct-trace",
-            eventType = "CREDIT",
-            amount = 100m,
-            eventTimestamp = DateTimeOffset.UtcNow
-        });
+            Content = JsonContent.Create(new
+            {
+                eventId = Guid.NewGuid(),
+                accountId = "acct-trace",
+                eventType = "CREDIT",
+                amount = 100m,
+                eventTimestamp = DateTimeOffset.UtcNow
+            })
+        };
+        request.Headers.TryAddWithoutValidation("traceparent", inboundTraceParent);
 
-        traceParent.Should().NotBeNullOrWhiteSpace();
+        await client.SendAsync(request);
+
+        outboundTraceParent.Should().NotBeNullOrWhiteSpace();
+        ExtractTraceId(outboundTraceParent).Should().Be(ExtractTraceId(inboundTraceParent));
     }
 
     [Fact]
@@ -276,6 +282,14 @@ public sealed class EventGatewayApiTests
 
             return await targetClient.SendAsync(forward, cancellationToken);
         }
+    }
+
+    private static string ExtractTraceId(string? traceParent)
+    {
+        traceParent.Should().NotBeNullOrWhiteSpace();
+        var parts = traceParent!.Split('-');
+        parts.Should().HaveCount(4);
+        return parts[1];
     }
 
     private sealed record EventResponse(DateTimeOffset EventTimestamp);
