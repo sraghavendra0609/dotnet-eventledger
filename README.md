@@ -48,8 +48,8 @@ Implemented capabilities:
 
 ```bash
 dotnet build EventLedger.slnx
-dotnet run --project /home/runner/work/dotnet-eventledger/dotnet-eventledger/sraghavendra0609/dotnet-eventledger/src/AccountService.Api/AccountService.Api.csproj
-dotnet run --project /home/runner/work/dotnet-eventledger/dotnet-eventledger/sraghavendra0609/dotnet-eventledger/src/EventGateway.Api/EventGateway.Api.csproj
+dotnet run --project src/AccountService.Api/AccountService.Api.csproj
+dotnet run --project src/EventGateway.Api/EventGateway.Api.csproj
 ```
 
 Event Gateway uses `AccountService__BaseUrl` (default `http://localhost:8081`).
