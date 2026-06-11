@@ -9,22 +9,17 @@ Cloud-native Event Ledger solution with two independent microservices:
 
 ```mermaid
 graph TD
-    Client(["Client"])
-    GW["Event Gateway API<br/>:8080"]
-    AS["Account Service<br/>:8081"]
-    GDB[("Gateway<br/>InMemory DB")]
-    ADB[("Account<br/>InMemory DB")]
+    Client([Client])
+    GW[Event Gateway API :8080]
+    AS[Account Service :8081]
+    GDB[(Gateway InMemory DB)]
+    ADB[(Account InMemory DB)]
 
-    Client -->|"POST /events"| GW
-    Client -->|"GET /events"| GW
-    GW -->|"POST /accounts/:id/transactions"| AS
-    GW -.- GDB
-    AS -.- ADB
-
-    style GW fill:#4A90D9,color:#fff
-    style AS fill:#7B68EE,color:#fff
-    style GDB fill:#e8e8e8
-    style ADB fill:#e8e8e8
+    Client -- POST /events --> GW
+    Client -- GET /events --> GW
+    GW -- POST /accounts/id/transactions --> AS
+    GW --- GDB
+    AS --- ADB
 ```
 
 ## Architecture overview
