@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using EventGateway.Application.Commands;
 using EventGateway.Application.Queries;

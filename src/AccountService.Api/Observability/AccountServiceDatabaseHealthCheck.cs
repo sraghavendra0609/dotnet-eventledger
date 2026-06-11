@@ -10,7 +10,7 @@ public sealed class AccountServiceDatabaseHealthCheck(AccountDbContext dbContext
     {
         var isInMemory = dbContext.Database.IsInMemory();
         var canConnect = isInMemory || await dbContext.Database.CanConnectAsync(cancellationToken);
-        var diagnostics = new Dictionary<string, object?>
+        var diagnostics = new Dictionary<string, object>
         {
             ["provider"] = dbContext.Database.ProviderName ?? "unknown",
             ["storage"] = isInMemory ? "in-memory" : "external",
