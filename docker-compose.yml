@@ -1,0 +1,22 @@
+version: '3.9'
+services:
+  account-service:
+    build:
+      context: .
+      dockerfile: src/AccountService.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "8081:8081"
+
+  event-gateway:
+    build:
+      context: .
+      dockerfile: src/EventGateway.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      AccountService__BaseUrl: http://account-service:8081
+    depends_on:
+      - account-service
+    ports:
+      - "8080:8080"

@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AccountService.Api/AccountService.Api.csproj" />
+    <Project Path="src/AccountService.Application/AccountService.Application.csproj" />
+    <Project Path="src/AccountService.Domain/AccountService.Domain.csproj" />
+    <Project Path="src/AccountService.Infrastructure/AccountService.Infrastructure.csproj" />
+    <Project Path="src/EventGateway.Api/EventGateway.Api.csproj" />
+    <Project Path="src/EventGateway.Application/EventGateway.Application.csproj" />
+    <Project Path="src/EventGateway.Domain/EventGateway.Domain.csproj" />
+    <Project Path="src/EventGateway.Infrastructure/EventGateway.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AccountService.Tests/AccountService.Tests.csproj" />
+    <Project Path="tests/EventGateway.Tests/EventGateway.Tests.csproj" />
+  </Folder>
+</Solution>
