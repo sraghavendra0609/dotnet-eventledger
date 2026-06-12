@@ -47,7 +47,7 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 - Independent in-memory databases per service
 - Synchronous REST communication (Gateway → Account)
 - Per-EventId locking for atomic idempotency (concurrent requests with the same `eventId` are serialized)
-- Out-of-order tolerance with timestamp sorting
+- Out-of-order tolerance with timestamp sorting — `GET /events?account=` returns events in ascending `eventTimestamp` order; `GET /accounts/{id}` on the Account Service also returns transactions in ascending `eventTimestamp` order
 - Health checks (`/health`)
 - Serilog structured JSON logs
 - OpenTelemetry tracing + metrics

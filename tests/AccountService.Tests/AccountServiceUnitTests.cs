@@ -60,8 +60,12 @@ public sealed class AccountServiceUnitTests
     }
 
     [Fact]
-    public async Task GetAccount_WithOutOfOrderTransactions_ReturnsMappedTransactionsAndBalance()
+    public async Task GetAccount_WithTransactions_ReturnsMappedTransactionsInChronologicalOrderAndBalance()
     {
+        // AccountRepository.GetByAccountAsync orders by EventTimestamp ascending.
+        // The handler maps entities to DTOs and preserves the repository's order without re-sorting.
+        // Transactions that arrive out of order are stored and then returned chronologically
+        // by the repository layer (see AccountRepository.GetByAccountAsync).
         var later = DateTimeOffset.UtcNow;
         var earlier = later.AddMinutes(-10);
 
@@ -71,8 +75,8 @@ public sealed class AccountServiceUnitTests
             .ReturnsAsync(
                 (IReadOnlyList<AccountTransaction>)
                 [
-                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Debit, Amount = 30m, EventTimestamp = later },
-                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Credit, Amount = 100m, EventTimestamp = earlier }
+                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Credit, Amount = 100m, EventTimestamp = earlier },
+                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Debit, Amount = 30m, EventTimestamp = later }
                 ]);
         repository
             .Setup(x => x.GetBalanceAsync("acct-order", It.IsAny<CancellationToken>()))
@@ -85,8 +89,8 @@ public sealed class AccountServiceUnitTests
         result.AccountId.Should().Be("acct-order");
         result.Balance.Should().Be(70m);
         result.Transactions.Should().HaveCount(2);
-        result.Transactions[0].EventTimestamp.Should().Be(later);
-        result.Transactions[1].EventTimestamp.Should().Be(earlier);
+        result.Transactions[0].EventTimestamp.Should().Be(earlier);
+        result.Transactions[1].EventTimestamp.Should().Be(later);
     }
 
     [Fact]

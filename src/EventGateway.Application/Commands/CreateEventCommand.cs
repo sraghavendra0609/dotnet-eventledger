@@ -25,7 +25,7 @@ public sealed class CreateEventCommandValidator : AbstractValidator<CreateEventC
     {
         RuleFor(x => x.EventId).NotEmpty();
         RuleFor(x => x.AccountId).NotEmpty().MaximumLength(64);
-        RuleFor(x => x.EventType).NotEmpty().Must(x => Enum.TryParse<EventType>(x, true, out _)).WithMessage("eventType must be CREDIT or DEBIT");
+        RuleFor(x => x.EventType).NotEmpty().Must(x => Enum.TryParse<EventType>(x, true, out _)).WithMessage("type must be CREDIT or DEBIT");
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Currency).NotEmpty();
         RuleFor(x => x.EventTimestamp).NotEqual(default(DateTimeOffset)).WithMessage("eventTimestamp must be a valid date");
