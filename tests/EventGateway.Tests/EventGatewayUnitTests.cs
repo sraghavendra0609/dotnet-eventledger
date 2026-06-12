@@ -4,11 +4,14 @@ using System.Net.Http.Json;
 using EventGateway.Application.Abstractions;
 using EventGateway.Application.Commands;
 using EventGateway.Application.Exceptions;
+using EventGateway.Application.Dto;
 using EventGateway.Application.Queries;
 using EventGateway.Domain.Entities;
 using EventGateway.Domain.Enums;
 using EventGateway.Infrastructure.Clients;
 using FluentAssertions;
+using Moq;
+using Moq.Protected;
 
 namespace EventGateway.Tests;
 
@@ -26,24 +29,35 @@ public sealed class EventGatewayUnitTests
             EventTimestamp = DateTimeOffset.UtcNow
         };
 
-        var repository = new FakeEventRepository { ExistingByEventId = existing };
-        var accountClient = new FakeAccountClient();
-        var handler = new CreateEventCommandHandler(repository, accountClient);
+        var repository = new Mock<IEventRepository>();
+        repository
+            .Setup(x => x.GetByEventIdAsync(existing.EventId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        var accountClient = new Mock<IAccountClient>();
+        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object);
 
         var result = await handler.Handle(new CreateEventCommand(existing.EventId, "acct-dup", "CREDIT", 25m, existing.EventTimestamp), CancellationToken.None);
 
         result.IsDuplicate.Should().BeTrue();
         result.Event.EventId.Should().Be(existing.EventId);
-        accountClient.CallCount.Should().Be(0);
-        repository.AddCallCount.Should().Be(0);
+        repository.Verify(x => x.AddAsync(It.IsAny<EventRecord>(), It.IsAny<CancellationToken>()), Times.Never);
+        accountClient.Verify(x => x.ApplyTransactionAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<EventType>(), It.IsAny<decimal>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task CreateEvent_WhenNewEvent_PersistsAndCallsDownstream()
     {
-        var repository = new FakeEventRepository();
-        var accountClient = new FakeAccountClient();
-        var handler = new CreateEventCommandHandler(repository, accountClient);
+        EventRecord? addedRecord = null;
+        var repository = new Mock<IEventRepository>();
+        repository
+            .Setup(x => x.GetByEventIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EventRecord?)null);
+        repository
+            .Setup(x => x.AddAsync(It.IsAny<EventRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<EventRecord, CancellationToken>((record, _) => addedRecord = record)
+            .Returns(Task.CompletedTask);
+        var accountClient = new Mock<IAccountClient>();
+        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object);
 
         var eventId = Guid.NewGuid();
         var timestamp = DateTimeOffset.UtcNow;
@@ -53,10 +67,10 @@ public sealed class EventGatewayUnitTests
         result.Event.EventId.Should().Be(eventId);
         result.Event.AccountId.Should().Be("acct-1");
         result.Event.EventType.Should().Be("DEBIT");
-        accountClient.CallCount.Should().Be(1);
-        repository.AddCallCount.Should().Be(1);
-        repository.LastAdded.Should().NotBeNull();
-        repository.LastAdded!.EventId.Should().Be(eventId);
+        addedRecord.Should().NotBeNull();
+        addedRecord!.EventId.Should().Be(eventId);
+        repository.Verify(x => x.AddAsync(It.IsAny<EventRecord>(), It.IsAny<CancellationToken>()), Times.Once);
+        accountClient.Verify(x => x.ApplyTransactionAsync("acct-1", eventId, EventType.Debit, 11m, timestamp, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -65,16 +79,18 @@ public sealed class EventGatewayUnitTests
         var later = DateTimeOffset.UtcNow;
         var earlier = later.AddMinutes(-15);
 
-        var repository = new FakeEventRepository
-        {
-            EventsByAccount =
-            [
-                new EventRecord { EventId = Guid.NewGuid(), AccountId = "acct-sort", EventType = EventType.Debit, Amount = 20m, EventTimestamp = earlier },
-                new EventRecord { EventId = Guid.NewGuid(), AccountId = "acct-sort", EventType = EventType.Credit, Amount = 30m, EventTimestamp = later }
-            ]
-        };
+        var events = (IReadOnlyList<EventRecord>)
+        [
+            new EventRecord { EventId = Guid.NewGuid(), AccountId = "acct-sort", EventType = EventType.Debit, Amount = 20m, EventTimestamp = earlier },
+            new EventRecord { EventId = Guid.NewGuid(), AccountId = "acct-sort", EventType = EventType.Credit, Amount = 30m, EventTimestamp = later }
+        ];
 
-        var handler = new GetEventsByAccountQueryHandler(repository);
+        var repository = new Mock<IEventRepository>();
+        repository
+            .Setup(x => x.GetByAccountAsync("acct-sort", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(events);
+
+        var handler = new GetEventsByAccountQueryHandler(repository.Object);
 
         var result = await handler.Handle(new GetEventsByAccountQuery("acct-sort"), CancellationToken.None);
 
@@ -84,11 +100,59 @@ public sealed class EventGatewayUnitTests
     }
 
     [Fact]
+    public async Task GetEventById_WhenFound_ReturnsMappedEvent()
+    {
+        var id = Guid.NewGuid();
+        var repository = new Mock<IEventRepository>();
+        repository
+            .Setup(x => x.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new EventRecord
+            {
+                Id = id,
+                EventId = Guid.NewGuid(),
+                AccountId = "acct-1",
+                EventType = EventType.Credit,
+                Amount = 5m,
+                EventTimestamp = DateTimeOffset.UtcNow
+            });
+
+        var handler = new GetEventByIdQueryHandler(repository.Object);
+        var result = await handler.Handle(new GetEventByIdQuery(id), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(id);
+    }
+
+    [Fact]
+    public async Task GetEventById_WhenMissing_ReturnsNull()
+    {
+        var repository = new Mock<IEventRepository>();
+        repository
+            .Setup(x => x.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EventRecord?)null);
+
+        var handler = new GetEventByIdQueryHandler(repository.Object);
+        var result = await handler.Handle(new GetEventByIdQuery(Guid.NewGuid()), CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task AccountServiceClient_WhenDownstreamReturnsFailure_ThrowsUnavailableException()
     {
-        var handler = new StubHttpMessageHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://account-service") };
-        var sut = new AccountServiceClient(new FakeHttpClientFactory(httpClient));
+        var httpMessageHandler = new Mock<HttpMessageHandler>();
+        httpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var httpClient = new HttpClient(httpMessageHandler.Object) { BaseAddress = new Uri("http://account-service") };
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(x => x.CreateClient("AccountServiceClient")).Returns(httpClient);
+        var sut = new AccountServiceClient(httpClientFactory.Object);
 
         var act = () => sut.ApplyTransactionAsync("acct-1", Guid.NewGuid(), EventType.Credit, 5m, DateTimeOffset.UtcNow, CancellationToken.None);
 
@@ -98,65 +162,26 @@ public sealed class EventGatewayUnitTests
     [Fact]
     public async Task AccountServiceClient_AddsTraceParentHeader_WhenActivityExists()
     {
-        HttpRequestMessage? captured = null;
-        var handler = new StubHttpMessageHandler(request =>
-        {
-            captured = request;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
-        });
+        HttpRequestMessage? capturedRequest = null;
+        var httpMessageHandler = new Mock<HttpMessageHandler>();
+        httpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((request, _) => capturedRequest = request)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.Accepted));
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://account-service") };
-        var sut = new AccountServiceClient(new FakeHttpClientFactory(httpClient));
+        var httpClient = new HttpClient(httpMessageHandler.Object) { BaseAddress = new Uri("http://account-service") };
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(x => x.CreateClient("AccountServiceClient")).Returns(httpClient);
+        var sut = new AccountServiceClient(httpClientFactory.Object);
 
         using var activity = new Activity("unit-test").Start();
         await sut.ApplyTransactionAsync("acct-1", Guid.NewGuid(), EventType.Credit, 9m, DateTimeOffset.UtcNow, CancellationToken.None);
 
-        captured.Should().NotBeNull();
-        captured!.Headers.Contains("traceparent").Should().BeTrue();
-    }
-
-    private sealed class FakeEventRepository : IEventRepository
-    {
-        public EventRecord? ExistingByEventId { get; set; }
-        public IReadOnlyList<EventRecord> EventsByAccount { get; set; } = [];
-        public int AddCallCount { get; private set; }
-        public EventRecord? LastAdded { get; private set; }
-
-        public Task<EventRecord?> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken) =>
-            Task.FromResult(ExistingByEventId is not null && ExistingByEventId.EventId == eventId ? ExistingByEventId : null);
-
-        public Task<EventRecord?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<EventRecord?>(null);
-
-        public Task<IReadOnlyList<EventRecord>> GetByAccountAsync(string accountId, CancellationToken cancellationToken) =>
-            Task.FromResult(EventsByAccount);
-
-        public Task AddAsync(EventRecord eventRecord, CancellationToken cancellationToken)
-        {
-            AddCallCount++;
-            LastAdded = eventRecord;
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class FakeAccountClient : IAccountClient
-    {
-        public int CallCount { get; private set; }
-
-        public Task ApplyTransactionAsync(string accountId, Guid eventId, EventType eventType, decimal amount, DateTimeOffset eventTimestamp, CancellationToken cancellationToken)
-        {
-            CallCount++;
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class FakeHttpClientFactory(HttpClient client) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => client;
-    }
-
-    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            handler(request);
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Headers.Contains("traceparent").Should().BeTrue();
     }
 }

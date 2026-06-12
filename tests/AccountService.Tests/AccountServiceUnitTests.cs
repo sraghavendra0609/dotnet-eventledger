@@ -4,6 +4,7 @@ using AccountService.Application.Queries;
 using AccountService.Domain.Entities;
 using AccountService.Domain.Enums;
 using FluentAssertions;
+using Moq;
 
 namespace AccountService.Tests;
 
@@ -13,40 +14,48 @@ public sealed class AccountServiceUnitTests
     public async Task ApplyTransaction_WhenDuplicateEventId_ReturnsTrueAndSkipsPersist()
     {
         var duplicateEventId = Guid.NewGuid();
-        var repository = new FakeAccountRepository
-        {
-            ExistingByEventId = new AccountTransaction
+        var repository = new Mock<IAccountRepository>();
+        repository
+            .Setup(x => x.GetByEventIdAsync(duplicateEventId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AccountTransaction
             {
                 EventId = duplicateEventId,
                 AccountId = "acct-dup",
                 EventType = EventType.Credit,
                 Amount = 10m,
                 EventTimestamp = DateTimeOffset.UtcNow
-            }
-        };
+            });
 
-        var handler = new ApplyTransactionCommandHandler(repository);
+        var handler = new ApplyTransactionCommandHandler(repository.Object);
 
         var result = await handler.Handle(new ApplyTransactionCommand("acct-dup", duplicateEventId, "CREDIT", 10m, DateTimeOffset.UtcNow), CancellationToken.None);
 
         result.Should().BeTrue();
-        repository.AddCallCount.Should().Be(0);
+        repository.Verify(x => x.AddAsync(It.IsAny<AccountTransaction>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task ApplyTransaction_WhenNewEvent_PersistsAndReturnsFalse()
     {
-        var repository = new FakeAccountRepository();
-        var handler = new ApplyTransactionCommandHandler(repository);
+        AccountTransaction? addedTransaction = null;
+        var repository = new Mock<IAccountRepository>();
+        repository
+            .Setup(x => x.GetByEventIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AccountTransaction?)null);
+        repository
+            .Setup(x => x.AddAsync(It.IsAny<AccountTransaction>(), It.IsAny<CancellationToken>()))
+            .Callback<AccountTransaction, CancellationToken>((transaction, _) => addedTransaction = transaction)
+            .Returns(Task.CompletedTask);
+        var handler = new ApplyTransactionCommandHandler(repository.Object);
 
         var eventId = Guid.NewGuid();
         var result = await handler.Handle(new ApplyTransactionCommand("acct-1", eventId, "DEBIT", 12m, DateTimeOffset.UtcNow), CancellationToken.None);
 
         result.Should().BeFalse();
-        repository.AddCallCount.Should().Be(1);
-        repository.LastAdded.Should().NotBeNull();
-        repository.LastAdded!.EventId.Should().Be(eventId);
-        repository.LastAdded.EventType.Should().Be(EventType.Debit);
+        addedTransaction.Should().NotBeNull();
+        addedTransaction!.EventId.Should().Be(eventId);
+        addedTransaction.EventType.Should().Be(EventType.Debit);
+        repository.Verify(x => x.AddAsync(It.IsAny<AccountTransaction>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -55,17 +64,20 @@ public sealed class AccountServiceUnitTests
         var later = DateTimeOffset.UtcNow;
         var earlier = later.AddMinutes(-10);
 
-        var repository = new FakeAccountRepository
-        {
-            ByAccount =
-            [
-                new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Debit, Amount = 30m, EventTimestamp = later },
-                new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Credit, Amount = 100m, EventTimestamp = earlier }
-            ],
-            Balance = 70m
-        };
+        var repository = new Mock<IAccountRepository>();
+        repository
+            .Setup(x => x.GetByAccountAsync("acct-order", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+                (IReadOnlyList<AccountTransaction>)
+                [
+                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Debit, Amount = 30m, EventTimestamp = later },
+                    new AccountTransaction { EventId = Guid.NewGuid(), AccountId = "acct-order", EventType = EventType.Credit, Amount = 100m, EventTimestamp = earlier }
+                ]);
+        repository
+            .Setup(x => x.GetBalanceAsync("acct-order", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(70m);
 
-        var handler = new GetAccountQueryHandler(repository);
+        var handler = new GetAccountQueryHandler(repository.Object);
 
         var result = await handler.Handle(new GetAccountQuery("acct-order"), CancellationToken.None);
 
@@ -79,36 +91,14 @@ public sealed class AccountServiceUnitTests
     [Fact]
     public async Task GetBalance_ForwardsRepositoryBalance()
     {
-        var repository = new FakeAccountRepository { Balance = 42m };
-        var handler = new GetBalanceQueryHandler(repository);
+        var repository = new Mock<IAccountRepository>();
+        repository
+            .Setup(x => x.GetBalanceAsync("acct-balance", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(42m);
+        var handler = new GetBalanceQueryHandler(repository.Object);
 
         var result = await handler.Handle(new GetBalanceQuery("acct-balance"), CancellationToken.None);
 
         result.Should().Be(42m);
-    }
-
-    private sealed class FakeAccountRepository : IAccountRepository
-    {
-        public AccountTransaction? ExistingByEventId { get; set; }
-        public IReadOnlyList<AccountTransaction> ByAccount { get; set; } = [];
-        public decimal Balance { get; set; }
-        public int AddCallCount { get; private set; }
-        public AccountTransaction? LastAdded { get; private set; }
-
-        public Task<AccountTransaction?> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken) =>
-            Task.FromResult(ExistingByEventId is not null && ExistingByEventId.EventId == eventId ? ExistingByEventId : null);
-
-        public Task AddAsync(AccountTransaction accountTransaction, CancellationToken cancellationToken)
-        {
-            AddCallCount++;
-            LastAdded = accountTransaction;
-            return Task.CompletedTask;
-        }
-
-        public Task<IReadOnlyList<AccountTransaction>> GetByAccountAsync(string accountId, CancellationToken cancellationToken) =>
-            Task.FromResult(ByAccount);
-
-        public Task<decimal> GetBalanceAsync(string accountId, CancellationToken cancellationToken) =>
-            Task.FromResult(Balance);
     }
 }
