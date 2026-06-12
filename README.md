@@ -25,7 +25,7 @@ Implemented capabilities:
 - Serilog structured JSON logs
 - OpenTelemetry tracing + metrics
 - W3C trace context propagation (`traceparent`)
-- Polly resiliency on Gateway outbound calls (timeout + retry with exponential backoff)
+- Polly resiliency on Gateway outbound calls (retry with exponential backoff, circuit breaker, per-attempt timeout)
 - Graceful degradation (Gateway POST returns `503` when Account service is unavailable; reads continue from local DB)
 
 ## Endpoints
@@ -81,10 +81,10 @@ docker compose up --build
 
 ## Resiliency choice
 
-Gateway uses Polly **timeout + retry**:
+Gateway uses Polly (outer → inner policy order):
 
-- Timeout: 2s
-- Retries: 3 attempts
-- Exponential backoff: 200ms, 400ms, 800ms
+- **Retry** (3 attempts, exponential backoff: 200ms / 400ms / 800ms)
+- **Circuit breaker** (opens after 5 consecutive failures, stays open for 30s)
+- **Per-attempt timeout** (2s)
 
 When downstream failures persist, Gateway returns `503` for `POST /events` and still serves read operations from its local event store.
