@@ -60,7 +60,12 @@ public sealed class AccountServiceClient(IHttpClientFactory httpClientFactory) :
             }
 
             var result = await response.Content.ReadFromJsonAsync<BalanceResult>(cancellationToken: cancellationToken);
-            return result?.Balance ?? 0m;
+            if (result is null)
+            {
+                throw new AccountServiceUnavailableException("Account service returned an unexpected empty response.");
+            }
+
+            return result.Balance;
         }
     }
 
