@@ -44,6 +44,19 @@ Implemented capabilities:
 - `GET /accounts/{accountId}`
 - `GET /health`
 
+## Setup
+
+### Prerequisites
+
+- .NET 8 SDK
+- Docker Desktop (or Docker Engine + Docker Compose plugin) for containerized startup
+
+### Install dependencies
+
+```bash
+dotnet restore EventLedger.slnx
+```
+
 ## Run locally
 
 ```bash
