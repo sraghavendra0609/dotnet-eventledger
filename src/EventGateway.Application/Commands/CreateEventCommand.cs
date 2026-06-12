@@ -8,7 +8,14 @@ using MediatR;
 
 namespace EventGateway.Application.Commands;
 
-public sealed record CreateEventCommand(Guid EventId, string AccountId, string EventType, decimal Amount, DateTimeOffset EventTimestamp) : IRequest<CreateEventResult>;
+public sealed record CreateEventCommand(
+    Guid EventId,
+    string AccountId,
+    string EventType,
+    decimal Amount,
+    string Currency,
+    DateTimeOffset EventTimestamp,
+    Dictionary<string, string>? Metadata = null) : IRequest<CreateEventResult>;
 
 public sealed record CreateEventResult(EventDto Event, bool IsDuplicate);
 
@@ -20,6 +27,8 @@ public sealed class CreateEventCommandValidator : AbstractValidator<CreateEventC
         RuleFor(x => x.AccountId).NotEmpty().MaximumLength(64);
         RuleFor(x => x.EventType).NotEmpty().Must(x => Enum.TryParse<EventType>(x, true, out _)).WithMessage("eventType must be CREDIT or DEBIT");
         RuleFor(x => x.Amount).GreaterThan(0);
+        RuleFor(x => x.Currency).NotEmpty();
+        RuleFor(x => x.EventTimestamp).NotEqual(default(DateTimeOffset)).WithMessage("eventTimestamp must be a valid date");
     }
 }
 
@@ -54,7 +63,21 @@ public sealed class CreateEventCommandHandler(IEventRepository eventRepository, 
         }
         finally
         {
+<<<<<<< HEAD
             semaphore.Release();
         }
+=======
+            EventId = request.EventId,
+            AccountId = request.AccountId,
+            EventType = parsedType,
+            Amount = request.Amount,
+            Currency = request.Currency,
+            EventTimestamp = request.EventTimestamp,
+            Metadata = request.Metadata
+        };
+
+        await eventRepository.AddAsync(eventRecord, cancellationToken);
+        return new CreateEventResult(EventDto.FromEntity(eventRecord), false);
+>>>>>>> origin/copilot/event-ledger-project
     }
 }

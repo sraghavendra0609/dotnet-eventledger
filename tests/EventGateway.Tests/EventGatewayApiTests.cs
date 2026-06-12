@@ -31,8 +31,9 @@ public sealed class EventGatewayApiTests
         {
             eventId,
             accountId = "acct-1",
-            eventType = "CREDIT",
+            type = "CREDIT",
             amount = 12m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
 
@@ -40,8 +41,9 @@ public sealed class EventGatewayApiTests
         {
             eventId,
             accountId = "acct-1",
-            eventType = "CREDIT",
+            type = "CREDIT",
             amount = 12m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
 
@@ -68,8 +70,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = Guid.NewGuid(),
             accountId,
-            eventType = "CREDIT",
+            type = "CREDIT",
             amount = 10m,
+            currency = "USD",
             eventTimestamp = later
         });
 
@@ -77,8 +80,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = Guid.NewGuid(),
             accountId,
-            eventType = "DEBIT",
+            type = "DEBIT",
             amount = 5m,
+            currency = "USD",
             eventTimestamp = earlier
         });
 
@@ -104,8 +108,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = firstId,
             accountId = "acct-res",
-            eventType = "CREDIT",
+            type = "CREDIT",
             amount = 50m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -116,8 +121,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = Guid.NewGuid(),
             accountId = "acct-res",
-            eventType = "DEBIT",
+            type = "DEBIT",
             amount = 2m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
         failed.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
@@ -149,6 +155,7 @@ public sealed class EventGatewayApiTests
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/events")
         {
+<<<<<<< HEAD
             Content = JsonContent.Create(new
             {
                 eventId = Guid.NewGuid(),
@@ -159,6 +166,15 @@ public sealed class EventGatewayApiTests
             })
         };
         request.Headers.TryAddWithoutValidation("traceparent", inboundTraceParent);
+=======
+            eventId = Guid.NewGuid(),
+            accountId = "acct-trace",
+            type = "CREDIT",
+            amount = 100m,
+            currency = "USD",
+            eventTimestamp = DateTimeOffset.UtcNow
+        });
+>>>>>>> origin/copilot/event-ledger-project
 
         await client.SendAsync(request);
 
@@ -187,8 +203,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = Guid.NewGuid(),
             accountId = "acct-flow",
-            eventType = "CREDIT",
+            type = "CREDIT",
             amount = 42m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
         eventResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -207,8 +224,9 @@ public sealed class EventGatewayApiTests
         {
             eventId = Guid.NewGuid(),
             accountId = "acct-4",
-            eventType = "UNKNOWN",
+            type = "UNKNOWN",
             amount = 20m,
+            currency = "USD",
             eventTimestamp = DateTimeOffset.UtcNow
         });
 
@@ -216,11 +234,16 @@ public sealed class EventGatewayApiTests
     }
 
     [Fact]
+<<<<<<< HEAD
     public async Task Health_ReturnsJsonStatusWithDatabaseDiagnostics()
+=======
+    public async Task MissingCurrency_ReturnsBadRequest()
+>>>>>>> origin/copilot/event-ledger-project
     {
         await using var factory = CreateGatewayFactory();
         var client = factory.CreateClient();
 
+<<<<<<< HEAD
         var response = await client.GetAsync("/health");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -234,6 +257,69 @@ public sealed class EventGatewayApiTests
         databaseCheck["status"]!.GetValue<string>().Should().Be("Healthy");
         databaseCheck["data"]!["provider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
         databaseCheck["data"]!["connectivity"]!.GetValue<string>().Should().Be("reachable");
+=======
+        var response = await client.PostAsJsonAsync("/events", new
+        {
+            eventId = Guid.NewGuid(),
+            accountId = "acct-5",
+            type = "CREDIT",
+            amount = 10m,
+            currency = string.Empty,
+            eventTimestamp = DateTimeOffset.UtcNow
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task MissingEventTimestamp_ReturnsBadRequest()
+    {
+        await using var factory = CreateGatewayFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/events", new
+        {
+            eventId = Guid.NewGuid(),
+            accountId = "acct-6",
+            type = "CREDIT",
+            amount = 10m,
+            currency = "USD",
+            eventTimestamp = default(DateTimeOffset)
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task MetadataIsStoredAndReturnedWithEvent()
+    {
+        var fake = new CountingAccountClient();
+        await using var factory = CreateGatewayFactory(services =>
+        {
+            services.RemoveAll<IAccountClient>();
+            services.AddSingleton<IAccountClient>(fake);
+        });
+
+        var client = factory.CreateClient();
+        var eventId = Guid.NewGuid();
+
+        var createResponse = await client.PostAsJsonAsync("/events", new
+        {
+            eventId,
+            accountId = "acct-meta",
+            type = "CREDIT",
+            amount = 75m,
+            currency = "EUR",
+            eventTimestamp = DateTimeOffset.UtcNow,
+            metadata = new Dictionary<string, string> { ["source"] = "mainframe-batch", ["batchId"] = "B-9042" }
+        });
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await createResponse.Content.ReadFromJsonAsync<EventDetailsResponse>();
+        created!.Currency.Should().Be("EUR");
+        created.Metadata.Should().ContainKey("source").WhoseValue.Should().Be("mainframe-batch");
+        created.Metadata.Should().ContainKey("batchId").WhoseValue.Should().Be("B-9042");
+>>>>>>> origin/copilot/event-ledger-project
     }
 
     private static WebApplicationFactory<EventGateway.Api.ApiMarker> CreateGatewayFactory(Action<IServiceCollection>? configureServices = null)
@@ -315,5 +401,6 @@ public sealed class EventGatewayApiTests
     }
 
     private sealed record EventResponse(DateTimeOffset EventTimestamp);
+    private sealed record EventDetailsResponse(string Currency, Dictionary<string, string>? Metadata);
     private sealed record BalanceResponse(string AccountId, decimal Balance);
 }

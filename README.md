@@ -52,6 +52,7 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 - Serilog structured JSON logs
 - OpenTelemetry tracing + metrics
 - W3C trace context propagation (`traceparent`)
+<<<<<<< HEAD
 - Custom metrics: request count by endpoint, latency histogram, and error rate — exposed via Prometheus at `/metrics`
 - Polly resiliency on Gateway outbound calls (timeout + retry with exponential backoff)
 - Graceful degradation (Gateway `POST /events` returns `503` when Account service is unavailable; reads continue from local DB)
@@ -80,6 +81,10 @@ curl http://localhost:8080/metrics
 # Account Service metrics
 curl http://localhost:8081/metrics
 ```
+=======
+- Polly resiliency on Gateway outbound calls (retry with exponential backoff, circuit breaker, per-attempt timeout)
+- Graceful degradation (Gateway POST returns `503` when Account service is unavailable; reads continue from local DB)
+>>>>>>> origin/copilot/event-ledger-project
 
 ## Endpoints
 
@@ -109,6 +114,19 @@ curl http://localhost:8081/metrics
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for Docker Compose run)
 
 Restore NuGet packages before building:
+
+```bash
+dotnet restore EventLedger.slnx
+```
+
+## Setup
+
+### Prerequisites
+
+- .NET 8 SDK
+- Docker Desktop (or Docker Engine + Docker Compose plugin) for containerized startup
+
+### Install dependencies
 
 ```bash
 dotnet restore EventLedger.slnx
@@ -170,6 +188,7 @@ Both services are connected via a shared `event-ledger-net` Docker network.
 
 ## Resiliency choice
 
+<<<<<<< HEAD
 The Gateway uses Polly **timeout + retry with exponential backoff** on all outbound Account Service calls:
 
 | Concern | Configuration |
@@ -178,6 +197,13 @@ The Gateway uses Polly **timeout + retry with exponential backoff** on all outbo
 | Retries | 3 attempts |
 | Backoff | 200 ms → 400 ms → 800 ms |
 | Transient errors handled | 5xx responses, network errors, timeouts |
+=======
+Gateway uses Polly (outer → inner policy order):
+
+- **Retry** (3 attempts, exponential backoff: 200ms / 400ms / 800ms)
+- **Circuit breaker** (opens after 5 consecutive failures, stays open for 30s)
+- **Per-attempt timeout** (2s)
+>>>>>>> origin/copilot/event-ledger-project
 
 `HttpClient.Timeout` is set to `Timeout.InfiniteTimeSpan` so it does not compete with the Polly timeout policy; all timeout control is handled exclusively by Polly.
 

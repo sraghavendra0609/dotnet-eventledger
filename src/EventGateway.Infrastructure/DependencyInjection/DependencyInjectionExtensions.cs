@@ -29,6 +29,12 @@ public static class DependencyInjectionExtensions
                 .HandleTransientHttpError()
                 .Or<TimeoutRejectedException>()
                 .WaitAndRetryAsync([TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(800)]))
+            .AddPolicyHandler(HttpPolicyExtensions
+                .HandleTransientHttpError()
+                .Or<TimeoutRejectedException>()
+                .CircuitBreakerAsync(
+                    handledEventsAllowedBeforeBreaking: 5,
+                    durationOfBreak: TimeSpan.FromSeconds(30)))
             .AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(2)));
 
         return services;
