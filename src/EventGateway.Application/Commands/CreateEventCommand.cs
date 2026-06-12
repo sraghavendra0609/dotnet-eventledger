@@ -55,7 +55,9 @@ public sealed class CreateEventCommandHandler(IEventRepository eventRepository, 
                 AccountId = request.AccountId,
                 EventType = parsedType,
                 Amount = request.Amount,
-                EventTimestamp = request.EventTimestamp
+                Currency = request.Currency,
+                EventTimestamp = request.EventTimestamp,
+                Metadata = request.Metadata
             };
 
             await eventRepository.AddAsync(eventRecord, cancellationToken);
@@ -63,21 +65,7 @@ public sealed class CreateEventCommandHandler(IEventRepository eventRepository, 
         }
         finally
         {
-<<<<<<< HEAD
             semaphore.Release();
         }
-=======
-            EventId = request.EventId,
-            AccountId = request.AccountId,
-            EventType = parsedType,
-            Amount = request.Amount,
-            Currency = request.Currency,
-            EventTimestamp = request.EventTimestamp,
-            Metadata = request.Metadata
-        };
-
-        await eventRepository.AddAsync(eventRecord, cancellationToken);
-        return new CreateEventResult(EventDto.FromEntity(eventRecord), false);
->>>>>>> origin/copilot/event-ledger-project
     }
 }

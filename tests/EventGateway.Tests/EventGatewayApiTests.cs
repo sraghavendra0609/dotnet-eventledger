@@ -155,26 +155,17 @@ public sealed class EventGatewayApiTests
 
         var request = new HttpRequestMessage(HttpMethod.Post, "/events")
         {
-<<<<<<< HEAD
             Content = JsonContent.Create(new
             {
                 eventId = Guid.NewGuid(),
                 accountId = "acct-trace",
-                eventType = "CREDIT",
+                type = "CREDIT",
                 amount = 100m,
+                currency = "USD",
                 eventTimestamp = DateTimeOffset.UtcNow
             })
         };
         request.Headers.TryAddWithoutValidation("traceparent", inboundTraceParent);
-=======
-            eventId = Guid.NewGuid(),
-            accountId = "acct-trace",
-            type = "CREDIT",
-            amount = 100m,
-            currency = "USD",
-            eventTimestamp = DateTimeOffset.UtcNow
-        });
->>>>>>> origin/copilot/event-ledger-project
 
         await client.SendAsync(request);
 
@@ -234,16 +225,11 @@ public sealed class EventGatewayApiTests
     }
 
     [Fact]
-<<<<<<< HEAD
     public async Task Health_ReturnsJsonStatusWithDatabaseDiagnostics()
-=======
-    public async Task MissingCurrency_ReturnsBadRequest()
->>>>>>> origin/copilot/event-ledger-project
     {
         await using var factory = CreateGatewayFactory();
         var client = factory.CreateClient();
 
-<<<<<<< HEAD
         var response = await client.GetAsync("/health");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -257,7 +243,14 @@ public sealed class EventGatewayApiTests
         databaseCheck["status"]!.GetValue<string>().Should().Be("Healthy");
         databaseCheck["data"]!["provider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
         databaseCheck["data"]!["connectivity"]!.GetValue<string>().Should().Be("reachable");
-=======
+    }
+
+    [Fact]
+    public async Task MissingCurrency_ReturnsBadRequest()
+    {
+        await using var factory = CreateGatewayFactory();
+        var client = factory.CreateClient();
+
         var response = await client.PostAsJsonAsync("/events", new
         {
             eventId = Guid.NewGuid(),
@@ -319,7 +312,6 @@ public sealed class EventGatewayApiTests
         created!.Currency.Should().Be("EUR");
         created.Metadata.Should().ContainKey("source").WhoseValue.Should().Be("mainframe-batch");
         created.Metadata.Should().ContainKey("batchId").WhoseValue.Should().Be("B-9042");
->>>>>>> origin/copilot/event-ledger-project
     }
 
     private static WebApplicationFactory<EventGateway.Api.ApiMarker> CreateGatewayFactory(Action<IServiceCollection>? configureServices = null)

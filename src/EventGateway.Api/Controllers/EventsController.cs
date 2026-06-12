@@ -17,13 +17,8 @@ public sealed class EventsController(IMediator mediator) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateEvent([FromBody] CreateEventRequest request, CancellationToken cancellationToken)
     {
-<<<<<<< HEAD
         RequestsCounter.Add(1, new TagList { { "endpoint", "POST /events" } });
-        var result = await mediator.Send(new CreateEventCommand(request.EventId, request.AccountId, request.EventType, request.Amount, request.EventTimestamp), cancellationToken);
-=======
-        RequestsCounter.Add(1);
         var result = await mediator.Send(new CreateEventCommand(request.EventId, request.AccountId, request.Type, request.Amount, request.Currency, request.EventTimestamp, request.Metadata), cancellationToken);
->>>>>>> origin/copilot/event-ledger-project
 
         if (result.IsDuplicate)
         {
