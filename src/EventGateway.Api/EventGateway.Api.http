@@ -10,10 +10,15 @@ Content-Type: application/json
 
 {
   "eventId": "00000000-0000-0000-0000-000000000001",
-  "accountId": "acc-001",
-  "eventType": "CREDIT",
-  "amount": 100.00,
-  "eventTimestamp": "2024-01-01T00:00:00Z"
+  "accountId": "acct-123",
+  "type": "CREDIT",
+  "amount": 150.00,
+  "currency": "USD",
+  "eventTimestamp": "2026-05-15T14:02:11Z",
+  "metadata": {
+    "source": "mainframe-batch",
+    "batchId": "B-9042"
+  }
 }
 
 ###
@@ -23,7 +28,12 @@ Accept: application/json
 
 ###
 
-GET {{EventGateway.Api_HostAddress}}/events?account=acc-001
+GET {{EventGateway.Api_HostAddress}}/events?account=acct-123
+Accept: application/json
+
+###
+
+GET {{EventGateway.Api_HostAddress}}/accounts/acct-123/balance
 Accept: application/json
 
 ###
