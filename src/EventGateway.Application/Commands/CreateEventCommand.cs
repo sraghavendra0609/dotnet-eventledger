@@ -1,5 +1,6 @@
 using EventGateway.Application.Abstractions;
 using EventGateway.Application.Dto;
+using EventGateway.Application.Services;
 using EventGateway.Domain.Entities;
 using EventGateway.Domain.Enums;
 using FluentValidation;
@@ -31,31 +32,40 @@ public sealed class CreateEventCommandValidator : AbstractValidator<CreateEventC
     }
 }
 
-public sealed class CreateEventCommandHandler(IEventRepository eventRepository, IAccountClient accountClient) : IRequestHandler<CreateEventCommand, CreateEventResult>
+public sealed class CreateEventCommandHandler(IEventRepository eventRepository, IAccountClient accountClient, EventIdempotencyLock idempotencyLock) : IRequestHandler<CreateEventCommand, CreateEventResult>
 {
     public async Task<CreateEventResult> Handle(CreateEventCommand request, CancellationToken cancellationToken)
     {
-        var existing = await eventRepository.GetByEventIdAsync(request.EventId, cancellationToken);
-        if (existing is not null)
+        var semaphore = idempotencyLock.GetLockFor(request.EventId);
+        await semaphore.WaitAsync(cancellationToken);
+        try
         {
-            return new CreateEventResult(EventDto.FromEntity(existing), true);
+            var existing = await eventRepository.GetByEventIdAsync(request.EventId, cancellationToken);
+            if (existing is not null)
+            {
+                return new CreateEventResult(EventDto.FromEntity(existing), true);
+            }
+
+            var parsedType = Enum.Parse<EventType>(request.EventType, true);
+            await accountClient.ApplyTransactionAsync(request.AccountId, request.EventId, parsedType, request.Amount, request.EventTimestamp, cancellationToken);
+
+            var eventRecord = new EventRecord
+            {
+                EventId = request.EventId,
+                AccountId = request.AccountId,
+                EventType = parsedType,
+                Amount = request.Amount,
+                Currency = request.Currency,
+                EventTimestamp = request.EventTimestamp,
+                Metadata = request.Metadata
+            };
+
+            await eventRepository.AddAsync(eventRecord, cancellationToken);
+            return new CreateEventResult(EventDto.FromEntity(eventRecord), false);
         }
-
-        var parsedType = Enum.Parse<EventType>(request.EventType, true);
-        await accountClient.ApplyTransactionAsync(request.AccountId, request.EventId, parsedType, request.Amount, request.EventTimestamp, cancellationToken);
-
-        var eventRecord = new EventRecord
+        finally
         {
-            EventId = request.EventId,
-            AccountId = request.AccountId,
-            EventType = parsedType,
-            Amount = request.Amount,
-            Currency = request.Currency,
-            EventTimestamp = request.EventTimestamp,
-            Metadata = request.Metadata
-        };
-
-        await eventRepository.AddAsync(eventRecord, cancellationToken);
-        return new CreateEventResult(EventDto.FromEntity(eventRecord), false);
+            semaphore.Release();
+        }
     }
 }

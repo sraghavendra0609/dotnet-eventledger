@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using EventGateway.Application.Abstractions;
 using EventGateway.Application.Exceptions;
 using EventGateway.Infrastructure.Clients;
@@ -135,10 +135,10 @@ public sealed class EventGatewayApiTests
     [Fact]
     public async Task TraceParentHeader_IsPropagatedToAccountService()
     {
-        string? traceParent = null;
+        string? outboundTraceParent = null;
         var handler = new DelegatingHandlerStub(request =>
         {
-            traceParent = request.Headers.TryGetValues("traceparent", out var values) ? values.SingleOrDefault() : null;
+            outboundTraceParent = request.Headers.TryGetValues("traceparent", out var values) ? values.SingleOrDefault() : null;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
         });
 
@@ -151,19 +151,26 @@ public sealed class EventGatewayApiTests
         });
 
         var client = factory.CreateClient();
+        const string inboundTraceParent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
-        using var activity = new Activity("test").Start();
-        await client.PostAsJsonAsync("/events", new
+        var request = new HttpRequestMessage(HttpMethod.Post, "/events")
         {
-            eventId = Guid.NewGuid(),
-            accountId = "acct-trace",
-            type = "CREDIT",
-            amount = 100m,
-            currency = "USD",
-            eventTimestamp = DateTimeOffset.UtcNow
-        });
+            Content = JsonContent.Create(new
+            {
+                eventId = Guid.NewGuid(),
+                accountId = "acct-trace",
+                type = "CREDIT",
+                amount = 100m,
+                currency = "USD",
+                eventTimestamp = DateTimeOffset.UtcNow
+            })
+        };
+        request.Headers.TryAddWithoutValidation("traceparent", inboundTraceParent);
 
-        traceParent.Should().NotBeNullOrWhiteSpace();
+        await client.SendAsync(request);
+
+        outboundTraceParent.Should().NotBeNullOrWhiteSpace();
+        ExtractTraceId(outboundTraceParent).Should().Be(ExtractTraceId(inboundTraceParent));
     }
 
     [Fact]
@@ -215,6 +222,27 @@ public sealed class EventGatewayApiTests
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Health_ReturnsJsonStatusWithDatabaseDiagnostics()
+    {
+        await using var factory = CreateGatewayFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsObject();
+        payload["service"]!.GetValue<string>().Should().Be("event-gateway");
+        payload["status"]!.GetValue<string>().Should().Be("Healthy");
+
+        var databaseCheck = payload["checks"]!["database"]!;
+        databaseCheck["status"]!.GetValue<string>().Should().Be("Healthy");
+        databaseCheck["data"]!["provider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
+        databaseCheck["data"]!["connectivity"]!.GetValue<string>().Should().Be("reachable");
     }
 
     [Fact]
@@ -354,6 +382,14 @@ public sealed class EventGatewayApiTests
 
             return await targetClient.SendAsync(forward, cancellationToken);
         }
+    }
+
+    private static string ExtractTraceId(string? traceParent)
+    {
+        traceParent.Should().NotBeNullOrWhiteSpace();
+        var parts = traceParent!.Split('-');
+        parts.Should().HaveCount(4);
+        return parts[1];
     }
 
     private sealed record EventResponse(DateTimeOffset EventTimestamp);

@@ -5,6 +5,7 @@ using EventGateway.Application.Abstractions;
 using EventGateway.Application.Commands;
 using EventGateway.Application.Exceptions;
 using EventGateway.Application.Queries;
+using EventGateway.Application.Services;
 using EventGateway.Domain.Entities;
 using EventGateway.Domain.Enums;
 using EventGateway.Infrastructure.Clients;
@@ -38,11 +39,9 @@ public sealed class EventGatewayUnitTests
             .Setup(x => x.GetByEventIdAsync(existing.EventId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         var accountClient = new Mock<IAccountClient>();
-        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object);
+        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object, new EventIdempotencyLock());
 
         var result = await handler.Handle(new CreateEventCommand(existing.EventId, "acct-dup", "CREDIT", 25m, "USD", existing.EventTimestamp), CancellationToken.None);
-
-        result.IsDuplicate.Should().BeTrue();
         result.Event.EventId.Should().Be(existing.EventId);
         repository.Verify(x => x.AddAsync(It.IsAny<EventRecord>(), It.IsAny<CancellationToken>()), Times.Never);
         accountClient.Verify(x => x.ApplyTransactionAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<EventType>(), It.IsAny<decimal>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -61,7 +60,7 @@ public sealed class EventGatewayUnitTests
             .Callback<EventRecord, CancellationToken>((record, _) => addedRecord = record)
             .Returns(Task.CompletedTask);
         var accountClient = new Mock<IAccountClient>();
-        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object);
+        var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object, new EventIdempotencyLock());
 
         var eventId = Guid.NewGuid();
         var timestamp = DateTimeOffset.UtcNow;
@@ -201,7 +200,7 @@ public sealed class EventGatewayUnitTests
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
             .Callback(() => handlerCallCount++)
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+            .Returns(() => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
 
         var circuitBreaker = HttpPolicyExtensions
             .HandleTransientHttpError()

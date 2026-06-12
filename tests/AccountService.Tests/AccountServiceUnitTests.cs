@@ -1,6 +1,7 @@
 using AccountService.Application.Abstractions;
 using AccountService.Application.Commands;
 using AccountService.Application.Queries;
+using AccountService.Application.Services;
 using AccountService.Domain.Entities;
 using AccountService.Domain.Enums;
 using FluentAssertions;
@@ -26,7 +27,7 @@ public sealed class AccountServiceUnitTests
                 EventTimestamp = DateTimeOffset.UtcNow
             });
 
-        var handler = new ApplyTransactionCommandHandler(repository.Object);
+        var handler = new ApplyTransactionCommandHandler(repository.Object, new TransactionIdempotencyLock());
 
         var result = await handler.Handle(new ApplyTransactionCommand("acct-dup", duplicateEventId, "CREDIT", 10m, DateTimeOffset.UtcNow), CancellationToken.None);
 
@@ -46,7 +47,7 @@ public sealed class AccountServiceUnitTests
             .Setup(x => x.AddAsync(It.IsAny<AccountTransaction>(), It.IsAny<CancellationToken>()))
             .Callback<AccountTransaction, CancellationToken>((transaction, _) => addedTransaction = transaction)
             .Returns(Task.CompletedTask);
-        var handler = new ApplyTransactionCommandHandler(repository.Object);
+        var handler = new ApplyTransactionCommandHandler(repository.Object, new TransactionIdempotencyLock());
 
         var eventId = Guid.NewGuid();
         var result = await handler.Handle(new ApplyTransactionCommand("acct-1", eventId, "DEBIT", 12m, DateTimeOffset.UtcNow), CancellationToken.None);
