@@ -9,8 +9,13 @@ using EventGateway.Domain.Entities;
 using EventGateway.Domain.Enums;
 using EventGateway.Infrastructure.Clients;
 using FluentAssertions;
+using Microsoft.Extensions.Http;
 using Moq;
 using Moq.Protected;
+using Polly;
+using Polly.CircuitBreaker;
+using Polly.Extensions.Http;
+using Polly.Timeout;
 
 namespace EventGateway.Tests;
 
@@ -182,5 +187,48 @@ public sealed class EventGatewayUnitTests
 
         capturedRequest.Should().NotBeNull();
         capturedRequest!.Headers.Contains("traceparent").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AccountServiceClient_AfterCircuitBreakerThreshold_StopsCallingHandler()
+    {
+        var handlerCallCount = 0;
+        var httpMessageHandler = new Mock<HttpMessageHandler>();
+        httpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback(() => handlerCallCount++)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var circuitBreaker = HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .Or<TimeoutRejectedException>()
+            .CircuitBreakerAsync(
+                handledEventsAllowedBeforeBreaking: 5,
+                durationOfBreak: TimeSpan.FromSeconds(30));
+
+        var policyHandler = new PolicyHttpMessageHandler(circuitBreaker) { InnerHandler = httpMessageHandler.Object };
+        var httpClient = new HttpClient(policyHandler) { BaseAddress = new Uri("http://account-service") };
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(x => x.CreateClient("AccountServiceClient")).Returns(httpClient);
+        var sut = new AccountServiceClient(httpClientFactory.Object);
+
+        // Trigger 5 failures to trip the circuit
+        for (var i = 0; i < 5; i++)
+        {
+            await Assert.ThrowsAnyAsync<AccountServiceUnavailableException>(
+                () => sut.ApplyTransactionAsync("acct-1", Guid.NewGuid(), EventType.Credit, 5m, DateTimeOffset.UtcNow, CancellationToken.None));
+        }
+
+        handlerCallCount.Should().Be(5);
+
+        // Circuit is now open — BrokenCircuitException propagates before reaching the handler
+        var act = () => sut.ApplyTransactionAsync("acct-1", Guid.NewGuid(), EventType.Credit, 5m, DateTimeOffset.UtcNow, CancellationToken.None);
+        await act.Should().ThrowAsync<BrokenCircuitException>();
+
+        handlerCallCount.Should().Be(5, "handler must not be called after the circuit opens");
     }
 }
