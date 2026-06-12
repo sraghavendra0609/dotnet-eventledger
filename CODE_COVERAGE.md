@@ -10,17 +10,17 @@ dotnet test EventLedger.slnx --collect:"XPlat Code Coverage" --results-directory
 
 | Test project | Status | Passed | Failed | Skipped |
 | --- | --- | ---: | ---: | ---: |
-| `AccountService.Tests` | Passed | 7 | 0 | 0 |
-| `EventGateway.Tests` | Passed | 17 | 0 | 0 |
+| `AccountService.Tests` | Passed | 8 | 0 | 0 |
+| `EventGateway.Tests` | Passed | 20 | 0 | 0 |
 
 ## Coverage summary (Cobertura)
 
-| Coverage file | Line coverage | Branch coverage |
+| Test project | Line coverage | Branch coverage |
 | --- | ---: | ---: |
-| `TestResults/55bec536-b645-417d-9df1-ff40f768bd1b/coverage.cobertura.xml` | 89.58% (370/413) | 69.57% (32/46) |
-| `TestResults/6a5a38e1-8b9b-439e-8058-3c2ec6c4ab64/coverage.cobertura.xml` | 94.81% (146/154) | 87.50% (14/16) |
+| `AccountService.Tests` | 96.79% (241/249) | 73.68% (28/38) |
+| `EventGateway.Tests` | 86.50% (551/637) | 58.33% (56/96) |
 
 ### Aggregate totals
 
-- Line coverage: **91.01%** (516/567)
-- Branch coverage: **74.19%** (46/62)
+- Line coverage: **89.39%** (792/886)
+- Branch coverage: **62.69%** (84/134)
