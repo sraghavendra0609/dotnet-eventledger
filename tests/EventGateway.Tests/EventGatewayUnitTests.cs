@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using EventGateway.Application.Abstractions;
 using EventGateway.Application.Commands;
 using EventGateway.Application.Exceptions;
-using EventGateway.Application.Dto;
 using EventGateway.Application.Queries;
 using EventGateway.Domain.Entities;
 using EventGateway.Domain.Enums;
@@ -109,7 +108,7 @@ public sealed class EventGatewayUnitTests
             .ReturnsAsync(new EventRecord
             {
                 Id = id,
-                EventId = Guid.NewGuid(),
+                EventId = id,
                 AccountId = "acct-1",
                 EventType = EventType.Credit,
                 Amount = 5m,
