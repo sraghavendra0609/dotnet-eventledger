@@ -17,7 +17,7 @@ public sealed class EventsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> CreateEvent([FromBody] CreateEventRequest request, CancellationToken cancellationToken)
     {
         RequestsCounter.Add(1);
-        var result = await mediator.Send(new CreateEventCommand(request.EventId, request.AccountId, request.EventType, request.Amount, request.EventTimestamp), cancellationToken);
+        var result = await mediator.Send(new CreateEventCommand(request.EventId, request.AccountId, request.Type, request.Amount, request.Currency, request.EventTimestamp, request.Metadata), cancellationToken);
 
         if (result.IsDuplicate)
         {
@@ -49,4 +49,11 @@ public sealed class EventsController(IMediator mediator) : ControllerBase
     }
 }
 
-public sealed record CreateEventRequest(Guid EventId, string AccountId, string EventType, decimal Amount, DateTimeOffset EventTimestamp);
+public sealed record CreateEventRequest(
+    Guid EventId,
+    string AccountId,
+    string Type,
+    decimal Amount,
+    string Currency,
+    DateTimeOffset EventTimestamp,
+    Dictionary<string, string>? Metadata = null);

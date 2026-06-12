@@ -8,7 +8,9 @@ public sealed record EventDto(
     string AccountId,
     string EventType,
     decimal Amount,
+    string Currency,
     DateTimeOffset EventTimestamp,
+    Dictionary<string, string>? Metadata,
     DateTimeOffset CreatedAt)
 {
     public static EventDto FromEntity(EventRecord eventRecord) =>
@@ -18,6 +20,8 @@ public sealed record EventDto(
             eventRecord.AccountId,
             eventRecord.EventType.ToString().ToUpperInvariant(),
             eventRecord.Amount,
+            eventRecord.Currency,
             eventRecord.EventTimestamp,
+            eventRecord.Metadata,
             eventRecord.CreatedAt);
 }
