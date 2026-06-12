@@ -29,9 +29,12 @@ public sealed class AccountServiceClient(IHttpClientFactory httpClientFactory) :
         }
 
         var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        using (response)
         {
-            throw new AccountServiceUnavailableException("Account service request failed.");
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new AccountServiceUnavailableException("Account service request failed.");
+            }
         }
     }
 }

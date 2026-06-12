@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using EventGateway.Api.Observability;
 using EventGateway.Application.Behaviors;
 using EventGateway.Application.Exceptions;
+using EventGateway.Application.Services;
 using EventGateway.Infrastructure.DependencyInjection;
 using EventGateway.Infrastructure.Persistence;
 using FluentValidation;
@@ -9,6 +11,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Context;
 using Serilog.Formatting.Compact;
 
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -30,8 +33,10 @@ builder.Services.AddControllers();
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(EventGateway.Application.Commands.CreateEventCommand).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(EventGateway.Application.Commands.CreateEventCommand).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddSingleton<EventIdempotencyLock>();
 builder.Services.AddGatewayInfrastructure(builder.Configuration);
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<EventGatewayDatabaseHealthCheck>("database");
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("event-gateway"))
@@ -43,10 +48,21 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddMeter("EventGateway.Api")
-        .AddConsoleExporter());
+        .AddConsoleExporter()
+        .AddPrometheusExporter());
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    using (LogContext.PushProperty("traceId", traceId))
+    {
+        await next();
+    }
+});
+
+app.UseMiddleware<EventGateway.Api.Observability.RequestMetricsMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler(errorApp =>
 {
@@ -78,7 +94,11 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapPrometheusScrapingEndpoint("/metrics");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "event-gateway")
+});
 
 app.Run();
 

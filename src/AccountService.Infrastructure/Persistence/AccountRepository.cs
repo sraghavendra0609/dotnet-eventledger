@@ -21,7 +21,14 @@ public sealed class AccountRepository(AccountDbContext dbContext) : IAccountRepo
 
     public async Task<decimal> GetBalanceAsync(string accountId, CancellationToken cancellationToken)
     {
-        var transactions = await dbContext.Transactions.Where(x => x.AccountId == accountId).ToListAsync(cancellationToken);
-        return transactions.Sum(x => x.EventType == EventType.Credit ? x.Amount : -x.Amount);
+        var credits = await dbContext.Transactions
+            .Where(x => x.AccountId == accountId && x.EventType == EventType.Credit)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        var debits = await dbContext.Transactions
+            .Where(x => x.AccountId == accountId && x.EventType == EventType.Debit)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+
+        return credits - debits;
     }
 }

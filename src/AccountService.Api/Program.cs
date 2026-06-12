@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using AccountService.Api.Observability;
 using AccountService.Application.Behaviors;
+using AccountService.Application.Services;
 using AccountService.Infrastructure.DependencyInjection;
 using AccountService.Infrastructure.Persistence;
 using FluentValidation;
@@ -8,6 +10,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Context;
 using Serilog.Formatting.Compact;
 
 Activity.DefaultIdFormat = ActivityIdFormat.W3C;
@@ -29,8 +32,10 @@ builder.Services.AddControllers();
 builder.Services.AddMediatR(configuration => configuration.RegisterServicesFromAssembly(typeof(AccountService.Application.Commands.ApplyTransactionCommand).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(AccountService.Application.Commands.ApplyTransactionCommand).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddSingleton<TransactionIdempotencyLock>();
 builder.Services.AddAccountInfrastructure();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<AccountServiceDatabaseHealthCheck>("database");
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("account-service"))
@@ -40,10 +45,21 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddMeter("AccountService.Api")
-        .AddConsoleExporter());
+        .AddConsoleExporter()
+        .AddPrometheusExporter());
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+    using (LogContext.PushProperty("traceId", traceId))
+    {
+        await next();
+    }
+});
+
+app.UseMiddleware<AccountService.Api.Observability.RequestMetricsMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler(errorApp =>
 {
@@ -66,7 +82,11 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+app.MapPrometheusScrapingEndpoint("/metrics");
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = (context, report) => HealthCheckResponseWriter.WriteAsync(context, report, "account-service")
+});
 
 app.Run();
 
