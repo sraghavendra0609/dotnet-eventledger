@@ -35,7 +35,7 @@ public sealed class EventGatewayUnitTests
         var accountClient = new Mock<IAccountClient>();
         var handler = new CreateEventCommandHandler(repository.Object, accountClient.Object);
 
-        var result = await handler.Handle(new CreateEventCommand(existing.EventId, "acct-dup", "CREDIT", 25m, existing.EventTimestamp), CancellationToken.None);
+        var result = await handler.Handle(new CreateEventCommand(existing.EventId, "acct-dup", "CREDIT", 25m, "USD", existing.EventTimestamp), CancellationToken.None);
 
         result.IsDuplicate.Should().BeTrue();
         result.Event.EventId.Should().Be(existing.EventId);
@@ -60,7 +60,7 @@ public sealed class EventGatewayUnitTests
 
         var eventId = Guid.NewGuid();
         var timestamp = DateTimeOffset.UtcNow;
-        var result = await handler.Handle(new CreateEventCommand(eventId, "acct-1", "DEBIT", 11m, timestamp), CancellationToken.None);
+        var result = await handler.Handle(new CreateEventCommand(eventId, "acct-1", "DEBIT", 11m, "USD", timestamp), CancellationToken.None);
 
         result.IsDuplicate.Should().BeFalse();
         result.Event.EventId.Should().Be(eventId);
