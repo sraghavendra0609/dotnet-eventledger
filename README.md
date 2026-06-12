@@ -17,7 +17,9 @@ graph TD
 
     Client -- POST /events --> GW
     Client -- GET /events --> GW
+    Client -- GET /accounts/id/balance --> GW
     GW -- POST /accounts/id/transactions --> AS
+    GW -- GET /accounts/id/balance --> AS
     GW --- GDB
     AS --- ADB
 ```
@@ -39,7 +41,8 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 2. The Gateway validates and idempotency-checks the incoming event (duplicate `eventId` returns immediately).
 3. The Gateway calls the **Account Service** `POST /accounts/{accountId}/transactions` synchronously, forwarding the W3C `traceparent` header.
 4. On success, the Gateway persists the event locally and returns `201 Created`.
-5. If the Account Service is unreachable the Gateway returns `503 Service Unavailable` — read endpoints (`GET /events`) continue to work from the local store.
+5. A client may query the balance via `GET /accounts/{accountId}/balance` on the **Gateway**; the Gateway proxies this call to the Account Service, propagating the `traceparent` header.
+6. If the Account Service is unreachable the Gateway returns `503 Service Unavailable` — read endpoints (`GET /events`) continue to work from the local store.
 
 ### Implemented capabilities
 
@@ -54,7 +57,7 @@ Each service is independently runnable and follows a **Clean Architecture** spli
 - W3C trace context propagation (`traceparent`)
 - Custom metrics: request count by endpoint, latency histogram, and error rate — exposed via Prometheus at `/metrics`
 - Polly resiliency on Gateway outbound calls (retry with exponential backoff, circuit breaker, per-attempt timeout)
-- Graceful degradation (Gateway `POST /events` returns `503` when Account service is unavailable; reads continue from local DB)
+- Graceful degradation (Gateway `POST /events` returns `503` when Account service is unavailable; reads continue from local DB; `GET /accounts/{accountId}/balance` returns `503` when Account Service is unavailable)
 
 ## Custom metrics
 
@@ -90,6 +93,7 @@ curl http://localhost:8081/metrics
 | `POST` | `/events` | Submit a new event |
 | `GET` | `/events/{id}` | Retrieve event by ID |
 | `GET` | `/events?account={accountId}` | List events for an account (sorted by timestamp) |
+| `GET` | `/accounts/{accountId}/balance` | Get current balance (proxied to Account Service; returns `503` if unavailable) |
 | `GET` | `/health` | Health check |
 | `GET` | `/metrics` | Prometheus metrics scraping endpoint |
 
@@ -169,6 +173,7 @@ Test coverage includes:
 - Resiliency behavior under Account Service failure (Gateway returns `503`)
 - Trace propagation (`traceparent` forwarded to Account Service)
 - Full Gateway → Account integration flow
+- Gateway balance endpoint (returns Account Service balance; returns `503` when Account Service is unavailable)
 
 ## Docker
 
@@ -191,4 +196,4 @@ Gateway uses Polly (outer → inner policy order):
 
 `HttpClient.Timeout` is set to `Timeout.InfiniteTimeSpan` so it does not compete with the Polly timeout policy; all timeout control is handled exclusively by Polly.
 
-When all retries are exhausted the Gateway surfaces `503 Service Unavailable` for `POST /events`. Read operations (`GET /events` and `GET /events/{id}`) are served entirely from the Gateway's local store and are unaffected by Account Service availability.
+When all retries are exhausted the Gateway surfaces `503 Service Unavailable` for `POST /events` and `GET /accounts/{accountId}/balance`. Read operations (`GET /events` and `GET /events/{id}`) are served entirely from the Gateway's local store and are unaffected by Account Service availability.

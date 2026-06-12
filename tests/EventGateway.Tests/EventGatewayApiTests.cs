@@ -314,6 +314,64 @@ public sealed class EventGatewayApiTests
         created.Metadata.Should().ContainKey("batchId").WhoseValue.Should().Be("B-9042");
     }
 
+    [Fact]
+    public async Task GatewayBalance_ReturnsBalanceFromAccountService()
+    {
+        await using var accountFactory = new WebApplicationFactory<AccountService.Api.ApiMarker>();
+        var accountClient = accountFactory.CreateClient();
+
+        var forwardingHandler = new ForwardToHttpClientHandler(accountClient);
+        await using var gatewayFactory = CreateGatewayFactory(services =>
+        {
+            services.RemoveAll<IAccountClient>();
+            services.AddScoped<IAccountClient, AccountServiceClient>();
+            services.AddHttpClient("AccountServiceClient", client => client.BaseAddress = accountClient.BaseAddress)
+                .ConfigurePrimaryHttpMessageHandler(() => forwardingHandler);
+        });
+
+        var gatewayClient = gatewayFactory.CreateClient();
+
+        // Post two events so the Account Service has a non-zero balance
+        await gatewayClient.PostAsJsonAsync("/events", new
+        {
+            eventId = Guid.NewGuid(),
+            accountId = "acct-gw-balance",
+            type = "CREDIT",
+            amount = 100m,
+            currency = "USD",
+            eventTimestamp = DateTimeOffset.UtcNow
+        });
+
+        await gatewayClient.PostAsJsonAsync("/events", new
+        {
+            eventId = Guid.NewGuid(),
+            accountId = "acct-gw-balance",
+            type = "DEBIT",
+            amount = 30m,
+            currency = "USD",
+            eventTimestamp = DateTimeOffset.UtcNow
+        });
+
+        var response = await gatewayClient.GetFromJsonAsync<BalanceResponse>("/accounts/acct-gw-balance/balance");
+        response!.Balance.Should().Be(70m);
+    }
+
+    [Fact]
+    public async Task GatewayBalance_WhenAccountServiceIsDown_Returns503()
+    {
+        var toggle = new ToggleAccountClient { Fail = true };
+        await using var factory = CreateGatewayFactory(services =>
+        {
+            services.RemoveAll<IAccountClient>();
+            services.AddSingleton<IAccountClient>(toggle);
+        });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/accounts/acct-down/balance");
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
     private static WebApplicationFactory<EventGateway.Api.ApiMarker> CreateGatewayFactory(Action<IServiceCollection>? configureServices = null)
     {
         return new WebApplicationFactory<EventGateway.Api.ApiMarker>()
@@ -336,6 +394,9 @@ public sealed class EventGatewayApiTests
             CallCount++;
             return Task.CompletedTask;
         }
+
+        public Task<decimal> GetBalanceAsync(string accountId, CancellationToken cancellationToken) =>
+            Task.FromResult(0m);
     }
 
     private sealed class ToggleAccountClient : IAccountClient
@@ -350,6 +411,16 @@ public sealed class EventGatewayApiTests
             }
 
             return Task.CompletedTask;
+        }
+
+        public Task<decimal> GetBalanceAsync(string accountId, CancellationToken cancellationToken)
+        {
+            if (Fail)
+            {
+                throw new AccountServiceUnavailableException("Account service down");
+            }
+
+            return Task.FromResult(0m);
         }
     }
 
