@@ -17,10 +17,10 @@ dotnet test EventLedger.slnx --collect:"XPlat Code Coverage" --results-directory
 
 | Test project | Line coverage | Branch coverage |
 | --- | ---: | ---: |
-| `AccountService.Tests` | 96.78% (241/249) | 73.68% (28/38) |
-| `EventGateway.Tests` | 86.75% (550/634) | 58.33% (56/96) |
+| `AccountService.Tests` | 96.79% (241/249) | 73.68% (28/38) |
+| `EventGateway.Tests` | 86.50% (551/637) | 58.33% (56/96) |
 
 ### Aggregate totals
 
-- Line coverage: **89.58%** (791/883)
+- Line coverage: **89.39%** (792/886)
 - Branch coverage: **62.69%** (84/134)
